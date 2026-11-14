@@ -179,7 +179,7 @@ let DATA=[];
 const fmt=(x,d=0)=>x.toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d});
 /* ====== KONFIGURASI (WAJIB DIISI SETELAH DEPLOY APPS SCRIPT) ====== */
 const API_URL='https://script.google.com/macros/s/AKfycbysMc3tLdrdpDfXzx3v2HyaVHwSW1CDFOmlQpjqsHrZMbxOmVsJKMrTKNwnh0BlchZu/exec';   // URL Web App Apps Script (berakhir /exec)
-const TOKEN='hf-7Kq2xP9mVd4R';       // harus sama dengan TOKEN di Code.gs
+const TOKEN='hf-7Kq2xP9mVd4R  token';       // harus sama dengan TOKEN di Code.gs
 /* ================================================================= */
 const CACHE_KEY='hf_all_v2';
 let SYNC_T=null,SYNC_BUSY=false,SYNC_AGAIN=false;
@@ -406,13 +406,28 @@ $('mt').addEventListener('input',renderModels);
 const RB=['< 2x','2x – 5x','5x – 10x','> 10x'];
 const rcls=v=>v<2?0:v<5?1:v<10?2:3;
 const mode=(arr,k=4)=>{const c=new Array(k).fill(0);arr.forEach(x=>c[x]++);let b=0;for(let i=1;i<k;i++)if(c[i]>c[b])b=i;return b;};
+const seqPred=(h,st,minN=3)=>{const c=h.map(rcls),n=c.length,g=mode(c),cur=st(c,n-1);if(cur===null||n<3)return g;
+  const cnt=[0,0,0,0];for(let j=0;j<n-1;j++)if(st(c,j)===cur)cnt[c[j+1]]++;
+  if(cnt[0]+cnt[1]+cnt[2]+cnt[3]<minN)return g;let b=0;for(let i=1;i<4;i++)if(cnt[i]>cnt[b])b=i;return b;};
+const ngramPred=h=>{const c=h.map(rcls),n=c.length,g=mode(c);
+  for(let k=5;k>=2;k--){if(n<k+3)continue;const cnt=[0,0,0,0];let tot=0;
+   for(let j=k-1;j<n-1;j++){let ok=true;for(let t=0;t<k;t++)if(c[j-t]!==c[n-1-t]){ok=false;break;}if(ok){cnt[c[j+1]]++;tot++;}}
+   if(tot>=3){let b=0;for(let i=1;i<4;i++)if(cnt[i]>cnt[b])b=i;return b;}}
+  return g;};
+const runLen=(c,j)=>{const x=c[j]===0?0:1;let r=0;while(j-r>=0&&r<4&&((c[j-r]===0?0:1)===x))r++;return x+':'+r;};
+const gapBin=(c,j)=>{let g=0;while(j-g>=0&&g<20&&c[j-g]!==3)g++;return g<5?0:g<10?1:g<20?2:3;};
 const RM=[
  {n:'Selalu tebak rentang tersering menurut teori (< 2x)',f:()=>0},
  {n:'Ulangi rentang ronde terakhir',f:h=>rcls(h[h.length-1])},
  {n:'Rentang tersering di 20 ronde terakhir',f:h=>mode(h.slice(-20).map(rcls))},
  {n:'Rentang tersering di seluruh data',f:h=>mode(h.map(rcls))},
  {n:'Rentang dari median 10 ronde terakhir',f:h=>{const s=h.slice(-10).sort((x,y)=>x-y);return rcls(s[Math.floor(s.length/2)]);}},
- {n:'Setelah 2× berturut < 2x, tebak 2x – 5x',f:h=>{const l=h.slice(-2);return l.length===2&&l.every(v=>v<2)?1:0;}}
+ {n:'Setelah 2× berturut < 2x, tebak 2x – 5x',f:h=>{const l=h.slice(-2);return l.length===2&&l.every(v=>v<2)?1:0;}},
+ {n:'Pola urutan: Markov orde 1 (lihat 1 hasil terakhir)',f:h=>seqPred(h,(c,j)=>c[j])},
+ {n:'Pola urutan: Markov orde 2 (lihat 2 hasil terakhir)',f:h=>seqPred(h,(c,j)=>j>=1?c[j-1]*4+c[j]:null)},
+ {n:'Pola urutan: cocokkan 2–5 hasil terakhir (n-gram)',f:ngramPred},
+ {n:'Pola urutan: streak (berapa kali berturut < 2x / ≥ 2x)',f:h=>seqPred(h,runLen)},
+ {n:'Pola urutan: jarak sejak angka > 10x terakhir',f:h=>seqPred(h,gapBin)}
 ];
 try{$('gm').innerHTML=RM.map((m,i)=>`<option value="${i}"${i===2?' selected':''}>${m.n}</option>`).join('');}catch(e){}
 $('gm').addEventListener('change',renderGrid);
