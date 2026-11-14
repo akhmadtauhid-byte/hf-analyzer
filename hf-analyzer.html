@@ -76,6 +76,8 @@ canvas{width:100%;height:220px;display:block}
   <div class="row">
     <button id="add">Sambungkan ke data</button>
     <button class="sec" id="copy">Salin semua data</button>
+    <button class="sec" id="csv">Ekspor CSV</button>
+    <button class="sec" id="undo">Hapus ronde terakhir</button>
     <button class="dng" id="clr">Hapus semua</button>
   </div>
   <div class="msg" id="msg"></div>
@@ -172,6 +174,12 @@ canvas{width:100%;height:220px;display:block}
   <h2 style="margin-top:14px">Model dan akurasinya</h2>
   <div class="scroll"><table id="rmtab"></table></div>
   <div class="box" id="rmv"></div>
+</div>
+
+<div class="card">
+  <h2>11. Uji data tertahan (holdout)</h2>
+  <div class="note" style="margin:0 0 10px">Uji paling jujur untuk menilai klaim "ada pola": model dipilih memakai 70% data lama, lalu diuji sekali pada 30% data terbaru yang belum dipakai memilih.</div>
+  <div class="box" id="hov"></div>
 </div>
 
 <div class="card"><h2>Asumsi</h2><div class="note">RTP <input id="rtp" type="number" value="97" step="0.1" style="width:80px;display:inline"> % (asumsi umum untuk game jenis ini, ubah sesuai informasi resmi). Model: P(jatuh ≥ m) = RTP ÷ m. Dengan banyak uji sekaligus, sekitar 5% uji bisa tampak signifikan murni karena kebetulan.</div></div>
@@ -289,6 +297,24 @@ let clrArm=false;
 $('clr').onclick=()=>{if(!clrArm){clrArm=true;$('clr').textContent='Yakin? Klik lagi';setTimeout(()=>{clrArm=false;$('clr').textContent='Hapus semua'},3500);return;}
   clrArm=false;$('clr').textContent='Hapus semua';DATA=[];save();$('msg').textContent='Semua data dihapus.';refresh();};
 
+
+/* ---- tombol tambahan: ekspor CSV, hapus ronde terakhir ---- */
+function dl(name,text){try{const b=new Blob(['﻿'+text],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(u);a.remove();},500);return true;}catch(e){return false;}}
+$('csv').onclick=()=>{
+  if(!DATA.length){$('msg').textContent='Belum ada data untuk diekspor.';return;}
+  const f=x=>String(x).replace('.',',');
+  const ok=dl('hf-ronde.csv','No;Pengali\n'+DATA.map((v,i)=>(i+1)+';'+f(v.toFixed(2))).join('\n'));
+  if(ok&&GU.length)dl('hf-tebakan.csv','No;Arah;Target;Hasil;Benar\n'+GU.map((x,i)=>(i+1)+';'+(x.d==='up'?'tembus':'jatuh')+';'+f(x.t)+';'+f(x.v)+';'+(x.h?'ya':'tidak')).join('\n'));
+  $('msg').textContent=ok?`CSV diunduh: ${DATA.length} ronde${GU.length?` dan ${GU.length} tebakan`:''} (pemisah titik koma, desimal koma, siap dibuka di Excel).`:'Unduhan ditolak browser. Pakai "Salin semua data" sebagai gantinya.';};
+let undoArm=false;
+$('undo').onclick=()=>{
+  if(!DATA.length){$('msg').textContent='Tidak ada ronde untuk dihapus.';return;}
+  if(!undoArm){undoArm=true;$('undo').textContent=`Hapus ${fmt(DATA[DATA.length-1],2)}x? Klik lagi`;setTimeout(()=>{undoArm=false;$('undo').textContent='Hapus ronde terakhir'},3500);return;}
+  undoArm=false;$('undo').textContent='Hapus ronde terakhir';
+  const v=DATA.pop();let extra='';
+  if(PEND){PEND=null;pstore();extra=' Tebakan yang menunggu dibatalkan karena urutan ronde berubah.';}
+  save();$('msg').textContent=`Ronde terakhir (${fmt(v,2)}x) dihapus. Sisa ${fmt(DATA.length)} ronde.${extra} Catatan: tebakan yang sudah dinilai tidak ikut berubah.`;refresh();};
+
 /* ---- statistik ---- */
 function erf(x){const s=x<0?-1:1;x=Math.abs(x);const t=1/(1+.3275911*x);return s*(1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-x*x));}
 const pval=z=>1-erf(Math.abs(z)/Math.SQRT2);
@@ -391,8 +417,8 @@ function renderGrid(){
     if(n>=40){
       const R=rtp(),P=[1-R/2,R/2-R/5,R/5-R/10,R/10],all=DATA.slice(-3000),N=all.length;let hit=0,E=0,cnt=0;
       for(let i=10;i<N;i++){const pr=m.f(all.slice(0,i)),act=rcls(all[i]);hit+=(pr===act)?1:0;E+=P[pr];cnt++;}
-      const nx=m.f(all);
-      pc=`<div class="pc"><small>SAMPEL PREDIKSI</small><b>${RB[nx]}</b><small>akurasi uji ulang ${fmt(hit/cnt*100,0)}% · kebetulan ${fmt(E/cnt*100,0)}%</small></div>`;
+      WHY='';const nx=m.f(all),why=WHY;
+      pc=`<div class="pc"><small>SAMPEL PREDIKSI</small><b>${RB[nx]}</b><small>akurasi uji ulang ${fmt(hit/cnt*100,0)}% · kebetulan ${fmt(E/cnt*100,0)}%</small>${why?`<small style="opacity:.9">${why}</small>`:''}</div>`;
     }else pc=`<div class="pc"><small>SAMPEL PREDIKSI</small><b>-</b><small>butuh 40+ ronde</small></div>`;
   }catch(e){}
   $('gridw').innerHTML=pc+a.map(v=>{const bg=v>=10?'#8a5a0c':v>=2?'#0f6f78':'#2b3a4d';return `<div style="background:${bg};border-radius:6px;padding:6px 2px;text-align:center;font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:center">${fmt(v,2)}x</div>`;}).join('');
@@ -412,20 +438,20 @@ function renderModels(){
   const T=Math.max(1.1,parseFloat(String($('mt').value).replace(',','.'))||2),R=rtp(),a=DATA.slice(-3000),n=a.length;
   if(n<40){$('mtab').innerHTML='';$('mv').innerHTML='Butuh minimal 40 ronde untuk uji ulang model.';return;}
   const pu=Math.min(1,R/T),start=10;
-  let h='<tr><th>Model</th><th>Prediksi ronde berikutnya</th><th>Akurasi uji ulang</th><th>Batas kebetulan</th><th>p-value</th><th>Lebih baik dari kebetulan?</th></tr>',sig=0;
+  let h='<tr><th>Model</th><th>Prediksi ronde berikutnya</th><th>Akurasi uji ulang</th><th>Batas kebetulan</th><th>p-value (setelah koreksi)</th><th>Lebih baik dari kebetulan?</th></tr>',sig=0,rawSig=0;
   MODELS.forEach(m=>{
     let hit=0,E=0,V=0,cnt=0;
     for(let i=start;i<n;i++){const hist=a.slice(0,i),pr=m.f(hist,T),act=a[i]>=T?1:0,p=pr?pu:1-pu;
       hit+=(pr===act)?1:0;E+=p;V+=p*(1-p);cnt++;}
-    const sd=Math.sqrt(V),z=sd>0?(hit-E)/sd:0,p=pval(z),better=p<0.05&&z>0,worse=p<0.05&&z<0;
-    if(better)sig++;
+    const sd=Math.sqrt(V),z=sd>0?(hit-E)/sd:0,p=pval(z),padj=Math.min(1,p*MODELS.length),better=padj<0.05&&z>0,worse=padj<0.05&&z<0;
+    if(p<0.05&&z>0)rawSig++;if(better)sig++;
     const next=m.f(a,T);
-    h+=`<tr><td>${m.n}</td><td><b>${next?'≥ ':'< '}${fmt(T,2)}x</b> <span style="color:var(--mu)">(sampel)</span></td><td>${fmt(hit/cnt*100,1)}%</td><td>${fmt(E/cnt*100,1)}%</td><td>${fmt(p,3)}</td><td>${better?'<span class="tag no">ya</span>':worse?'<span class="tag ok">lebih buruk</span>':'<span class="tag ok">tidak</span>'}</td></tr>`;
+    h+=`<tr><td>${m.n}</td><td><b>${next?'≥ ':'< '}${fmt(T,2)}x</b> <span style="color:var(--mu)">(sampel)</span></td><td>${fmt(hit/cnt*100,1)}%</td><td>${fmt(E/cnt*100,1)}%</td><td>${fmt(p,3)} <span style="color:var(--mu)">(koreksi ${fmt(padj,3)})</span></td><td>${better?'<span class="tag no">ya, lolos koreksi</span>':worse?'<span class="tag ok">lebih buruk</span>':'<span class="tag ok">tidak</span>'}</td></tr>`;
   });
   $('mtab').innerHTML=h;
   $('mv').innerHTML=sig===0
-   ?`<b>Tidak ada model yang mengalahkan kebetulan</b> pada ${fmt(n-start)} ronde uji. Prediksi di kolom kedua sama nilainya dengan lempar koin. Itu konsisten dengan data acak murni.`
-   :`<b>${sig} dari ${MODELS.length} model tampak lebih baik dari kebetulan.</b> Dengan ${MODELS.length} model diuji sekaligus, sekitar ${fmt(MODELS.length*0.025,1)} model akan lolos karena kebetulan saja. Ulangi dengan data baru: model yang benar-benar menangkap pola akan tetap unggul, yang kebetulan akan kembali ke ${fmt(pu*100,0)}% atau ${fmt((1-pu)*100,0)}%.`;
+   ?`<b>Tidak ada model yang mengalahkan kebetulan</b> pada ${fmt(n-start)} ronde uji. Prediksi di kolom kedua sama nilainya dengan lempar koin. Itu konsisten dengan data acak murni.${rawSig?` (${rawSig} model sempat tampak menonjol sebelum koreksi uji berganda; koreksi menyaringnya.)`:''}`
+   :`<b>${sig} dari ${MODELS.length} model lolos koreksi uji berganda.</b> Dengan ${MODELS.length} model diuji sekaligus, sekitar ${fmt(MODELS.length*0.025,1)} model akan lolos karena kebetulan saja. Ulangi dengan data baru: model yang benar-benar menangkap pola akan tetap unggul, yang kebetulan akan kembali ke ${fmt(pu*100,0)}% atau ${fmt((1-pu)*100,0)}%.`;
 }
 $('mt').addEventListener('input',renderModels);
 
@@ -433,14 +459,18 @@ $('mt').addEventListener('input',renderModels);
 const RB=['< 2x','2x – 5x','5x – 10x','> 10x'];
 const rcls=v=>v<2?0:v<5?1:v<10?2:3;
 const mode=(arr,k=4)=>{const c=new Array(k).fill(0);arr.forEach(x=>c[x]++);let b=0;for(let i=1;i<k;i++)if(c[i]>c[b])b=i;return b;};
-const seqPred=(h,st,minN=3)=>{const c=h.map(rcls),n=c.length,g=mode(c),cur=st(c,n-1);if(cur===null||n<3)return g;
+let WHY='';
+const seqPred=(h,st,minN=3)=>{const c=h.map(rcls),n=c.length,g=mode(c),cur=st(c,n-1);
+  if(cur===null||n<3){WHY='cadangan: data belum cukup';return g;}
   const cnt=[0,0,0,0];for(let j=0;j<n-1;j++)if(st(c,j)===cur)cnt[c[j+1]]++;
-  if(cnt[0]+cnt[1]+cnt[2]+cnt[3]<minN)return g;let b=0;for(let i=1;i<4;i++)if(cnt[i]>cnt[b])b=i;return b;};
+  const tot=cnt[0]+cnt[1]+cnt[2]+cnt[3];
+  if(tot<minN){WHY=`cadangan: pola ini baru ${tot}× di riwayat`;return g;}
+  let b=0;for(let i=1;i<4;i++)if(cnt[i]>cnt[b])b=i;WHY=`dari pola: ${tot} kejadian serupa`;return b;};
 const ngramPred=h=>{const c=h.map(rcls),n=c.length,g=mode(c);
   for(let k=5;k>=2;k--){if(n<k+3)continue;const cnt=[0,0,0,0];let tot=0;
    for(let j=k-1;j<n-1;j++){let ok=true;for(let t=0;t<k;t++)if(c[j-t]!==c[n-1-t]){ok=false;break;}if(ok){cnt[c[j+1]]++;tot++;}}
-   if(tot>=3){let b=0;for(let i=1;i<4;i++)if(cnt[i]>cnt[b])b=i;return b;}}
-  return g;};
+   if(tot>=3){let b=0;for(let i=1;i<4;i++)if(cnt[i]>cnt[b])b=i;WHY=`dari pola: ${tot} kejadian serupa (${k} hasil terakhir)`;return b;}}
+  WHY='cadangan: belum ada pola yang cocok ≥3×';return g;};
 const runLen=(c,j)=>{const x=c[j]===0?0:1;let r=0;while(j-r>=0&&r<4&&((c[j-r]===0?0:1)===x))r++;return x+':'+r;};
 const gapBin=(c,j)=>{let g=0;while(j-g>=0&&g<20&&c[j-g]!==3)g++;return g<5?0:g<10?1:g<20?2:3;};
 const RM=[
@@ -458,7 +488,9 @@ const RM=[
 ];
 try{$('gm').innerHTML=RM.map((m,i)=>`<option value="${i}"${i===2?' selected':''}>${m.n}</option>`).join('');}catch(e){}
 $('gm').addEventListener('change',renderGrid);
+let RMRES=[];
 function renderRange(){
+  RMRES=[];
   const R=rtp(),a=DATA.slice(-3000),n=a.length;
   const P=[1-R/2,R/2-R/5,R/5-R/10,R/10];
   const obsAll=[0,0,0,0];a.forEach(v=>obsAll[rcls(v)]++);
@@ -467,24 +499,42 @@ function renderRange(){
   RB.forEach((b,i)=>{h+=`<tr><td>${b}</td><td><b>${fmt(P[i]*100,1)}%</b></td><td>${n?fmt(obsAll[i]/n*100,1)+'%':'-'}</td><td>${rec.length?fmt(obsR[i]/rec.length*100,1)+'%':'-'}</td></tr>`;});
   $('rptab').innerHTML=h;
   if(n<40){$('rmtab').innerHTML='';$('rmv').innerHTML=`Median teoritis angka jatuh sekitar <b>${fmt(R/0.5,2)}x</b>: separuh ronde jatuh di bawahnya. Butuh minimal 40 ronde untuk uji ulang model.`;return;}
-  const start=10;let sig=0;
-  let t='<tr><th>Model</th><th>Tebakan ronde berikutnya</th><th>Akurasi uji ulang</th><th>Batas kebetulan</th><th>p-value</th><th>Lebih baik dari kebetulan?</th></tr>';
+  const start=10;let sig=0,rawSig=0;
+  let t='<tr><th>Model</th><th>Tebakan ronde berikutnya</th><th>Akurasi uji ulang</th><th>Batas kebetulan</th><th>p-value (setelah koreksi)</th><th>Lebih baik dari kebetulan?</th></tr>';
   RM.forEach(m=>{
-    let hit=0,E=0,V=0,cnt=0;
+    let hit=0,E=0,V=0,cnt=0;const hs=[],es=[];
     for(let i=start;i<n;i++){const hist=a.slice(0,i),pr=m.f(hist),act=rcls(a[i]);
-      hit+=(pr===act)?1:0;E+=P[pr];V+=P[pr]*(1-P[pr]);cnt++;}
-    const sd=Math.sqrt(V),z=sd>0?(hit-E)/sd:0,p=pval(z),better=p<0.05&&z>0,worse=p<0.05&&z<0;if(better)sig++;
-    t+=`<tr><td>${m.n}</td><td><b>${RB[m.f(a)]}</b> <span style="color:var(--mu)">(sampel)</span></td><td>${fmt(hit/cnt*100,1)}%</td><td>${fmt(E/cnt*100,1)}%</td><td>${fmt(p,3)}</td><td>${better?'<span class="tag no">ya</span>':worse?'<span class="tag ok">lebih buruk</span>':'<span class="tag ok">tidak</span>'}</td></tr>`;
+      hit+=(pr===act)?1:0;E+=P[pr];V+=P[pr]*(1-P[pr]);cnt++;hs.push(pr===act?1:0);es.push(P[pr]);}
+    RMRES.push({m,hs,es});
+    const sd=Math.sqrt(V),z=sd>0?(hit-E)/sd:0,p=pval(z),padj=Math.min(1,p*RM.length),better=padj<0.05&&z>0,worse=padj<0.05&&z<0;if(p<0.05&&z>0)rawSig++;if(better)sig++;
+    t+=`<tr><td>${m.n}</td><td><b>${RB[m.f(a)]}</b> <span style="color:var(--mu)">(sampel)</span></td><td>${fmt(hit/cnt*100,1)}%</td><td>${fmt(E/cnt*100,1)}%</td><td>${fmt(p,3)} <span style="color:var(--mu)">(koreksi ${fmt(padj,3)})</span></td><td>${better?'<span class="tag no">ya, lolos koreksi</span>':worse?'<span class="tag ok">lebih buruk</span>':'<span class="tag ok">tidak</span>'}</td></tr>`;
   });
   $('rmtab').innerHTML=t;
   $('rmv').innerHTML=(sig===0
-   ?`<b>Tidak ada model rentang yang mengalahkan kebetulan</b> pada ${fmt(n-start)} ronde uji. `
-   :`<b>${sig} dari ${RM.length} model tampak lebih baik dari kebetulan.</b> Dengan ${RM.length} model diuji sekaligus, sebagian bisa lolos karena kebetulan saja. Ulangi dengan data baru. `)
+   ?`<b>Tidak ada model rentang yang mengalahkan kebetulan</b> pada ${fmt(n-start)} ronde uji. ${rawSig?`(${rawSig} model sempat tampak menonjol sebelum koreksi uji berganda.) `:''}`
+   :`<b>${sig} dari ${RM.length} model lolos koreksi uji berganda.</b> Dengan ${RM.length} model diuji sekaligus, sebagian bisa lolos karena kebetulan saja. Ulangi dengan data baru. `)
    +`Perhatikan bahwa rentang paling mungkin <b>selalu "< 2x"</b> (${fmt(P[0]*100,1)}%), apa pun hasil sebelumnya. Itu sebabnya tebakan rentang paling "akurat" hanyalah tebakan paling membosankan, dan ia tidak memberi tahu apa pun tentang ronde berikutnya.`;
+}
+
+function renderHold(){
+  const el=$('hov');if(!el)return;
+  const L=RMRES.length?RMRES[0].hs.length:0;
+  if(L<100){el.innerHTML='Butuh minimal sekitar 110 ronde data. Makin banyak data, makin bermakna uji ini.';return;}
+  const cut=Math.floor(L*0.7),sum=(x,a,b)=>{let t=0;for(let i=a;i<b;i++)t+=x[i];return t;};
+  const vr=(x,a,b)=>{let t=0;for(let i=a;i<b;i++)t+=x[i]*(1-x[i]);return t;};
+  let best=null;
+  RMRES.forEach(r=>{const sd=Math.sqrt(vr(r.es,0,cut)),z=sd>0?(sum(r.hs,0,cut)-sum(r.es,0,cut))/sd:0;if(!best||z>best.z)best={r,z};});
+  const r=best.r,h1=sum(r.hs,0,cut),e1=sum(r.es,0,cut),h2=sum(r.hs,cut,L),e2=sum(r.es,cut,L),n2=L-cut;
+  const sd2=Math.sqrt(vr(r.es,cut,L)),z2=sd2>0?(h2-e2)/sd2:0,p2=pval(z2),lulus=p2<0.05&&z2>0;
+  el.innerHTML=`Model terbaik di <b>${cut} ronde pertama</b> (70% data): <b>${r.m.n}</b>. Akurasinya ${fmt(h1/cut*100,1)}% melawan batas kebetulan ${fmt(e1/cut*100,1)}%.<br><br>`
+   +`Lalu model itu diuji <b>sekali saja</b> pada <b>${n2} ronde terakhir</b> (30% data yang belum dipakai memilih): akurasi <b>${fmt(h2/n2*100,1)}%</b> melawan kebetulan ${fmt(e2/n2*100,1)}%, p = ${fmt(p2,3)}.<br><br>`
+   +(lulus?`<b>Lulus.</b> Model tetap unggul di data yang belum pernah dilihat. Ini perlu dikonfirmasi: ulangi setelah data bertambah, karena satu kali lulus bisa tetap kebetulan (peluang sekitar 5%).`
+          :`<b>Tidak lulus.</b> Keunggulan di data awal tidak bertahan di data baru. Itu pola khas dari kebetulan: model yang tampak terbaik di data lama hanya "menghafal" noise.`)
+   +`<div class="note">Cara kerja: memilih model terbaik dari banyak pilihan selalu terlihat bagus di data yang dipakai memilihnya. Hanya uji pada data yang tersisa yang jujur.</div>`;
 }
 function refresh(){
   const a=DATA,n=a.length;
-  resolvePending();renderProb();renderGuess();renderGrid();renderModels();renderRange();
+  resolvePending();renderProb();renderGuess();renderGrid();renderModels();renderRange();renderHold();
   $('kN').textContent=fmt(n);
   if(n){const s=[...a].sort((x,y)=>x-y);$('kMed').textContent=s[Math.floor(n/2)].toFixed(2)+'x';$('kMax').textContent=s[n-1].toFixed(2)+'x';$('kIns').textContent=fmt(a.filter(v=>v<1.01).length/n*100,1)+'%';}
   else{$('kMed').textContent=$('kMax').textContent=$('kIns').textContent='-';}
