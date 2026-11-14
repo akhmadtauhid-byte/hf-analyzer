@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistem Analisa High Flyer</title>
+<style>
+:root{--bg:#0f1318;--card:#171d25;--line:#283240;--tx:#e8edf3;--mu:#97a3b3;--ac:#4cc9f0;--bad:#ff6b6b;--ok:#6fdc8c;--warn:#f9c74f}
+*{box-sizing:border-box}
+body{margin:0 auto;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px;max-width:980px}
+h1{font-size:20px;margin:4px 0 2px}h2{font-size:16px;margin:0 0 10px}
+.sub{color:var(--mu);font-size:13px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+label{display:block;font-size:12px;color:var(--mu);margin-bottom:3px}
+input,textarea{width:100%;background:#0f1318;border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:8px;font:inherit}
+textarea{min-height:100px;font-family:ui-monospace,monospace;font-size:13px}
+button{background:var(--ac);color:#06202a;border:0;border-radius:8px;padding:9px 14px;cursor:pointer;font:inherit;font-weight:600}
+button.sec{background:#243040;color:var(--tx)}button.dng{background:#4a2327;color:#ffb3b3}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.kpi{background:#0f1318;border:1px solid var(--line);border-radius:10px;padding:10px}
+.kpi b{display:block;font-size:20px}.kpi span{font-size:12px;color:var(--mu)}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:560px}
+th,td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}th{color:var(--mu);font-weight:500;font-size:12px}
+.neg{color:var(--bad)}.pos{color:var(--ok)}.wrn{color:var(--warn)}
+.note{font-size:12.5px;color:var(--mu);margin-top:8px}
+.box{background:#0f1318;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px;font-size:14px}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;font-weight:600}
+.tag.ok{background:#17402a;color:var(--ok)}.tag.no{background:#44301a;color:var(--warn)}
+.bar{height:10px;background:#0f1318;border-radius:5px;overflow:hidden;border:1px solid var(--line)}.bar>i{display:block;height:100%;background:var(--ac)}
+.hist{display:grid;grid-template-columns:90px 1fr 110px;gap:6px 10px;align-items:center;font-size:13px}
+.hb{position:relative;height:16px;background:#0f1318;border-radius:4px;border:1px solid var(--line)}
+.hb i{position:absolute;left:0;top:0;height:100%;background:var(--ac);opacity:.85;border-radius:3px}
+.hb u{position:absolute;top:-2px;height:20px;width:2px;background:var(--warn)}
+canvas{width:100%;height:220px;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--mu);margin-top:6px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
+.msg{margin-top:10px;font-size:13.5px}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(249,199,79,.0);filter:brightness(1)}50%{box-shadow:0 0 16px 4px rgba(249,199,79,.85);filter:brightness(1.35)}}
+.pc{grid-column:span 2;border:2px solid #f9c74f;background:#3a3010;border-radius:8px;padding:6px 8px;text-align:center;animation:glow 1.4s ease-in-out infinite}
+.pc b{display:block;font-size:20px;line-height:1.2;color:#ffe08a}.pc small{display:block;font-size:10.5px;color:#e6d9a8;line-height:1.3}
+@media (prefers-reduced-motion:reduce){.pc{animation:none}}
+</style>
+</head>
+<body>
+<h1>Sistem Analisa High Flyer</h1>
+<div class="sub">Kumpulkan riwayat pengali sedikit demi sedikit, sistem menyambungkannya otomatis, lalu menguji apakah ada pola atau murni acak. Untuk edukasi dan pembuktian, bukan prediksi.</div>
+
+<div class="card">
+  <h2>1. Data terkumpul</h2>
+  <div class="stats">
+    <div class="kpi"><b id="kN">0</b><span>ronde tercatat</span></div>
+    <div class="kpi"><b id="kMed">-</b><span>median pengali</span></div>
+    <div class="kpi"><b id="kMax">-</b><span>pengali tertinggi</span></div>
+    <div class="kpi"><b id="kIns">-</b><span>jatuh di 1x</span></div>
+  </div>
+  <div class="row" style="margin-top:12px"><div style="flex:1;min-width:200px"><div class="bar"><i id="prog" style="width:0"></i></div></div><span class="note" id="progt" style="margin:0"></span></div>
+  <div class="note">Target 1.000 ronde agar ujinya kuat. Data tersimpan di browser ini saja (bisa hilang); gunakan tombol Salin untuk cadangan.</div>
+</div>
+
+<div class="card" id="vcard" style="display:none">
+  <h2>2a. Baca foto otomatis (AI)</h2>
+  <label>Pilih satu atau beberapa screenshot grid "Hasil Terakhir". Urutan waktu dibaca dari waktu file dibuat (terlama dulu).</label>
+  <input id="imgs" type="file" accept="image/*" multiple>
+  <div class="row"><button id="read">Baca foto dengan AI</button><span class="note" id="vst" style="margin:0"></span></div>
+  <div class="note">Hasil bacaan masuk ke kotak di bawah per foto. <b>Periksa dulu</b> sebelum klik "Sambungkan": AI bisa salah baca angka, terutama pada foto buram atau miring. Foto yang menampilkan tab lain (Taruhan, Bagan) akan dilewati.</div>
+</div>
+
+<div class="card">
+  <h2>2. Tambah data</h2>
+  <label><b>Tambah cepat:</b> ketik 1 hasil terbaru saja (atau beberapa, terbaru dulu), misalnya 1,85x. Langsung ditambahkan ke akhir data.</label>
+  <div class="row" style="margin-top:4px;margin-bottom:14px"><input id="qadd" type="text" inputmode="decimal" placeholder="mis. 1,85x" style="max-width:200px"><button id="qbtn">Tambah ronde</button></div>
+  <label>Atau tempel isi grid "Hasil Terakhir" dengan urutan seperti di layar (kiri-atas = terbaru). Contoh: 1,85x 1x 9,77x</label>
+  <textarea id="paste" placeholder="1,85x&#10;1x&#10;9,77x&#10;..."></textarea>
+  <div class="row">
+    <button id="add">Sambungkan ke data</button>
+    <button class="sec" id="copy">Salin semua data</button>
+    <button class="dng" id="clr">Hapus semua</button>
+  </div>
+  <div class="msg" id="msg"></div>
+  <div class="note">Cara kerja: sistem membalik urutan, mencari bagian yang sama dengan ujung data lama (minimal 4 angka), lalu menambahkan yang baru saja. Jika tidak ada tumpang tindih, kamu akan diminta konfirmasi karena mungkin ada ronde yang terlewat.</div>
+</div>
+
+<div class="card" id="A">
+  <h2>3. Hasil uji statistik</h2>
+  <div class="scroll"><table id="tt"></table></div>
+  <div class="box" id="verdict"></div>
+</div>
+
+<div class="card">
+  <h2>3a. Peluang ronde berikutnya (bukan prediksi)</h2>
+  <div class="box" id="streak" style="margin-top:0"></div>
+  <div class="scroll" style="margin-top:10px"><table id="pt"></table></div>
+  <div class="note">Peluang ini <b>sama untuk setiap ronde</b>, apa pun hasil sebelumnya. Panel ini menunjukkan seberapa kecil peluang menang di tiap target, bukan memberi tahu ronde depan berapa.</div>
+  <h2 style="margin-top:14px">Kalkulator cepat</h2>
+  <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
+    <div><label>Taruhan (Rp)</label><input id="cb" type="number" value="10000"></div>
+    <div><label>Cashout di (x)</label><input id="cc" type="number" value="2" step="0.1" min="1.01"></div>
+    <div><label>Kalah beruntun (kali)</label><input id="ck" type="number" value="5" min="1"></div>
+  </div>
+  <div class="box" id="cres"></div>
+</div>
+
+<div class="card">
+  <h2>4. Sebaran pengali: teramati vs teori</h2>
+  <div class="hist" id="hist"></div>
+  <div class="note">Garis kuning = nilai teori acak murni. Batang biru = data kamu.</div>
+</div>
+
+<div class="card">
+  <h2>5. Uji ulang strategi pada data asli (taruhan 1 unit)</h2>
+  <div class="scroll"><table id="bt"></table></div>
+  <canvas id="ch"></canvas><div class="legend" id="lg"></div>
+  <div class="note">Dihitung pada urutan ronde yang benar-benar terjadi. Untung-rugi jangka pendek berayun, tetapi arahnya akan mengikuti house edge.</div>
+</div>
+
+<div class="card">
+  <h2>6. Cek cepat dari tab Stats ("Bagan", 500 ronde terakhir)</h2>
+  <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(90px,1fr))">
+    <div><label>1x (%)</label><input id="s1" type="number" value="3"></div>
+    <div><label>1,01–2x</label><input id="s2" type="number" value="48"></div>
+    <div><label>2,01–5x</label><input id="s3" type="number" value="29"></div>
+    <div><label>5,01–10x</label><input id="s4" type="number" value="8"></div>
+    <div><label>&gt;10x</label><input id="s5" type="number" value="12"></div>
+    <div><label>Jumlah ronde</label><input id="sN" type="number" value="500"></div>
+  </div>
+  <div class="row"><button class="sec" id="schk">Uji persentase ini</button></div>
+  <div class="box" id="sres" style="display:none"></div>
+</div>
+
+<div class="card">
+  <h2>7. Uji tebakan (tanpa taruhan)</h2>
+  <div class="note" style="margin:0 0 10px">Latihan tanpa uang: <b>pastikan data grid sudah terbaru</b> (tempel grid terakhir), lalu tebak sebelum pesawat jatuh. Setelah jatuh, ketik hasilnya di "Tambah cepat" (bagian 2) dan tebakan dinilai otomatis. <b>Jangan bertaruh uang</b> saat memakai ini.</div>
+  <div style="max-width:160px"><label>Target (x)</label><input id="gt" type="number" value="2" step="0.1" min="1.1"></div>
+  <div class="row"><button id="gup">Tebak: tembus ≥ target</button><button class="sec" id="gdn">Tebak: jatuh &lt; target</button></div>
+  <div class="box" id="gpend" style="display:none">
+    <div id="gptxt"></div>
+    <div class="row" id="gmrow"><input id="gres" type="text" inputmode="decimal" placeholder="pengali hasil, mis. 1,85" style="max-width:190px"><button id="gok">Catat hasil</button><button class="sec" id="gcancel">Batal</button></div>
+  </div>
+  <div class="stats" style="margin-top:12px">
+    <div class="kpi"><b id="gn">0</b><span>tebakan dicatat</span></div>
+    <div class="kpi"><b id="gh">0</b><span>benar</span></div>
+    <div class="kpi"><b id="ga">-</b><span>akurasimu</span></div>
+    <div class="kpi"><b id="ge">-</b><span>rata-rata kebetulan</span></div>
+  </div>
+  <div class="box" id="gv"></div>
+  <div class="note" id="gl"></div>
+  <div class="row"><button class="dng" id="gclr">Hapus semua tebakan</button></div>
+</div>
+
+<div class="card">
+  <h2>8. Grid hasil terbaru (terbaru di kiri-atas)</h2>
+  <div style="max-width:420px;margin-bottom:10px"><label>Model untuk kotak sampel prediksi (kuning berkedip)</label><select id="gm" style="width:100%;background:#0f1318;border:1px solid var(--line);color:var(--tx);border-radius:8px;padding:8px;font:inherit"></select></div>
+  <div id="gridw" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(66px,1fr));gap:5px;align-items:stretch"></div>
+  <div class="note">Kotak kuning di kiri-atas adalah <b>sampel prediksi eksperimen</b> untuk ronde berikutnya, lengkap dengan akurasi uji ulangnya. Jika akurasinya tidak melebihi kebetulan, kotak itu setara lempar koin.</div>
+  <div class="legend"><span><i style="background:#2b3a4d"></i>&lt; 2x</span><span><i style="background:#0f6f78"></i>2x – 10x</span><span><i style="background:#8a5a0c"></i>≥ 10x</span></div>
+</div>
+
+<div class="card">
+  <h2>9. Model eksperimen: sampel prediksi (bukan saran)</h2>
+  <div class="note" style="margin:0 0 10px">Tujuannya menganalisa apakah ada pola. Setiap prediksi ditampilkan bersama akurasi uji ulang (<i>walk-forward</i>: tiap ronde ditebak hanya dengan data sebelum ronde itu). Jika akurasinya tidak melebihi batas kebetulan, prediksi model itu setara lempar koin.</div>
+  <div style="max-width:160px"><label>Target (x)</label><input id="mt" type="number" value="2" step="0.1" min="1.1"></div>
+  <div class="scroll" style="margin-top:10px"><table id="mtab"></table></div>
+  <div class="box" id="mv"></div>
+</div>
+
+<div class="card">
+  <h2>10. Model eksperimen rentang angka (sampel, bukan saran)</h2>
+  <div class="note" style="margin:0 0 10px">Menebak <b>rentang</b> jatuhnya pesawat, bukan angka persis: di bawah 2x, 2–5x, 5–10x, atau di atas 10x. Setiap tebakan diuji ulang pada data lama dan dibandingkan dengan batas kebetulan.</div>
+  <div class="scroll"><table id="rptab"></table></div>
+  <h2 style="margin-top:14px">Model dan akurasinya</h2>
+  <div class="scroll"><table id="rmtab"></table></div>
+  <div class="box" id="rmv"></div>
+</div>
+
+<div class="card"><h2>Asumsi</h2><div class="note">RTP <input id="rtp" type="number" value="97" step="0.1" style="width:80px;display:inline"> % (asumsi umum untuk game jenis ini, ubah sesuai informasi resmi). Model: P(jatuh ≥ m) = RTP ÷ m. Dengan banyak uji sekaligus, sekitar 5% uji bisa tampak signifikan murni karena kebetulan.</div></div>
+
+<script>
+const $=id=>document.getElementById(id),KEY='hf_data_v1';
+const SEED='1,85x 1x 9,77x 1,20x 9,17x 4,77x 1,54x 1,41x 2,62x 1,05x 2x 9,72x 2,44x 7,49x 3,72x 1,62x 2,95x 14,77x 3x 1,11x 13,26x 1,50x 1,89x 2,05x 2,68x 1,28x 1,54x 1,14x 5,41x 2,02x 2,11x 2,32x 1,11x 2,07x 1x 1,54x 4,68x 4,14x 1,60x 1,09x 1,91x 1,02x 11,90x 1,36x 3,98x 1,09x 1,09x 6,14x 2,56x 2,06x 1,01x 22,17x 2,73x 1,81x 1,15x 10,37x 32,93x 1,59x 5,28x 9,49x';
+let DATA=[];
+const fmt=(x,d=0)=>x.toLocaleString('id-ID',{minimumFractionDigits:d,maximumFractionDigits:d});
+function load(){try{const s=localStorage.getItem(KEY);if(s)return JSON.parse(s);}catch(e){}return null;}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(DATA));}catch(e){}}
+function parse(t){
+  let m=[...t.matchAll(/(\d+(?:[.,]\d+)?)\s*x/gi)].map(x=>parseFloat(x[1].replace(',','.')));
+  if(!m.length)m=t.split(/[\s;]+/).map(s=>parseFloat(s.replace(',','.'))).filter(isFinite);
+  return m.filter(v=>v>=1);
+}
+const eq=(a,b)=>Math.abs(a-b)<0.005;
+function findSeq(hay,nd){for(let i=hay.length-nd.length;i>=0;i--){let ok=true;for(let j=0;j<nd.length;j++)if(!eq(hay[i+j],nd[j])){ok=false;break;}if(ok)return i;}return -1;}
+function merge(stored,pasteNF){
+  const p=[...pasteNF].reverse();
+  if(!stored.length)return{data:p.slice(),added:p.length,ov:0,kind:'first'};
+  if(findSeq(stored,p)>=0)return{data:stored,added:0,ov:p.length,kind:'dup'};
+  for(let k=Math.min(stored.length,p.length-1);k>=4;k--){
+    let ok=true;for(let j=0;j<k;j++)if(!eq(stored[stored.length-k+j],p[j])){ok=false;break;}
+    if(ok)return{data:stored.concat(p.slice(k)),added:p.length-k,ov:k,kind:'ok'};
+  }
+  return{data:stored.concat(p),added:p.length,ov:0,kind:'gap'};
+}
+let pending=null;
+function processBlocks(blocks,i,log,total){
+  const msg=$('msg');
+  if(i>=blocks.length){
+    save();$('paste').value='';refresh();
+    msg.innerHTML=log.join('<br>')+`<br><b>Total ditambahkan: ${total} ronde.</b>`;return;
+  }
+  const p=blocks[i],tag=blocks.length>1?`Foto ${i+1}: `:'';
+  if(p.length<5){log.push(`${tag}<span class="wrn">tidak terbaca (kurang dari 5 angka), dilewati.</span>`);return processBlocks(blocks,i+1,log,total);}
+  const r=merge(DATA,p);
+  if(r.kind==='dup'){log.push(`${tag}semua angka sudah ada, tidak ada yang ditambahkan.`);return processBlocks(blocks,i+1,log,total);}
+  if(r.kind==='gap'){
+    msg.innerHTML=log.join('<br>')+(log.length?'<br>':'')+`<span class="wrn">${tag}tidak ada tumpang tindih dengan data lama, mungkin ada ronde yang terlewat di antaranya.</span> <button id="force" class="sec" style="margin-left:6px">Tambahkan tetap (${p.length} ronde)</button> <button id="skip" class="sec">Lewati</button>`;
+    $('force').onclick=()=>{DATA=r.data;log.push(`${tag}ditambahkan ${r.added} ronde (dengan kemungkinan celah).`);
+      if(PEND){PEND=null;pstore();log.push('Tebakan yang menunggu dibatalkan karena ada celah data (urutan ronde tidak pasti).');}
+      processBlocks(blocks,i+1,log,total+r.added);};
+    $('skip').onclick=()=>{log.push(`${tag}dilewati.`);processBlocks(blocks,i+1,log,total);};
+    return;
+  }
+  DATA=r.data;
+  log.push(r.kind==='first'?`${tag}data awal ${r.added} ronde.`:`${tag}tersambung (tumpang tindih ${r.ov}), ditambahkan <b>${r.added}</b> ronde baru.`);
+  processBlocks(blocks,i+1,log,total+r.added);
+}
+function quickAdd(vals){
+  const chrono=[...vals].reverse();DATA=DATA.concat(chrono);save();
+  $('msg').innerHTML=`Ditambahkan ${chrono.length} ronde: ${chrono.map(v=>fmt(v,2)+'x').join(', ')}. Pastikan ronde ini belum tercatat sebelumnya.`;
+  refresh();
+}
+$('qbtn').onclick=()=>{const v=parse($('qadd').value);
+  if(!v.length){$('msg').innerHTML='<span class="wrn">Tidak terbaca. Ketik angka seperti 1,85x.</span>';return;}
+  if(v.length>10){$('msg').innerHTML='<span class="wrn">Untuk lebih dari 10 angka, gunakan kotak tempel grid di bawah.</span>';return;}
+  quickAdd(v);$('qadd').value='';};
+$('qadd').addEventListener('keydown',e=>{if(e.key==='Enter')$('qbtn').onclick();});
+$('add').onclick=()=>{
+  const raw=$('paste').value;
+  const blocks=raw.split(/^\s*#.*$/m).map(s=>s.trim()).filter(s=>s.length).map(parse);
+  if(blocks.length===1&&blocks[0].length>=1&&blocks[0].length<5){quickAdd(blocks[0]);$('paste').value='';return;}
+  if(!blocks.length||blocks.every(b=>b.length<5)){$('msg').innerHTML='<span class="wrn">Tidak terbaca. Tempel minimal 5 angka berformat seperti 1,85x.</span>';return;}
+  processBlocks(blocks,0,[],0);
+};
+
+/* ---- baca foto dengan AI ---- */
+let SAMPLE=null;
+(async()=>{try{if(window.claude&&claude.use){SAMPLE=await claude.use('sample');
+  if(SAMPLE&&SAMPLE.limits){const l=await SAMPLE.limits();if(l&&l.images)$('vcard').style.display='block';}}}catch(e){}})();
+function shrink(file){return new Promise((res,rej)=>{
+  const url=URL.createObjectURL(file),im=new Image();
+  im.onload=()=>{const s=Math.min(1,1800/Math.max(im.width,im.height)),c=document.createElement('canvas');
+    c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+    c.toBlob(b=>{URL.revokeObjectURL(url);b?res(b):rej(new Error('gagal memproses gambar'))},'image/jpeg',.9);};
+  im.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('gambar tidak bisa dibuka'))};im.src=url;});}
+const PROMPT=`Foto ini adalah screenshot game crash "High Flyer". Cari panel kiri dengan judul "HASIL TERAKHIR" yang berisi grid kotak berisi pengali (contoh 1,85x, 1x, 9,77x).
+Tugasmu: tulis ulang SEMUA pengali di grid itu apa adanya, baris demi baris, dari kiri ke kanan, dari atas ke bawah.
+Aturan:
+- Lewati kotak kuning berlabel DIMAINKAN (itu ronde berjalan, bukan hasil).
+- Gunakan koma desimal seperti di layar, akhiri dengan x. Contoh: 1,85x 1x 9,77x.
+- Tulis "1x" jika kotak hanya menampilkan 1x. Jangan membulatkan atau menebak angka yang tidak terbaca; lewati kotak yang benar-benar tidak terbaca dan tulis ? sebagai penandanya.
+- Abaikan semua teks lain (strip hasil di bagian bawah layar, daftar taruhan, angka pesawat yang sedang terbang).
+- Jika foto TIDAK menampilkan grid "HASIL TERAKHIR", balas persis: TIDAK ADA GRID
+Balas hanya dengan daftar angka dipisah spasi, tanpa penjelasan.`;
+$('read').onclick=async()=>{
+  const fs=[...$('imgs').files],st=$('vst');
+  if(!fs.length){st.textContent='Pilih foto dulu.';return;}
+  fs.sort((a,b)=>a.lastModified-b.lastModified||a.name.localeCompare(b.name));
+  $('read').disabled=true;const out=[];
+  try{
+    for(let i=0;i<fs.length;i++){
+      st.textContent=`Membaca foto ${i+1} dari ${fs.length}…`;
+      const blob=await shrink(fs[i]);
+      const r=await SAMPLE(PROMPT,{images:[blob],modelTier:'default',cache:false});
+      const t=(r.text||'').trim();
+      if(/TIDAK ADA GRID/i.test(t)){out.push(`# foto ${i+1} (${fs[i].name}) - tidak ada grid, dilewati\n`);continue;}
+      const q=(t.match(/\?/g)||[]).length,nums=parse(t).length;
+      out.push(`# foto ${i+1} (${fs[i].name}) - ${nums} angka terbaca${q?`, ${q} kotak tidak terbaca (hapus tanda ?)`:''}\n${t}`);
+    }
+    $('paste').value=out.join('\n\n');
+    st.textContent='Selesai. Periksa isi kotak di bawah, lalu klik "Sambungkan ke data".';
+  }catch(e){
+    st.textContent=e&&e.code==='not_granted'?'Izin AI belum diberikan.':e&&e.code==='rate_limited'?'Terlalu cepat, coba lagi sebentar lagi.':'Gagal membaca foto: '+((e&&e.message)||'kesalahan tak dikenal');
+    if(out.length)$('paste').value=out.join('\n\n');
+  }
+  $('read').disabled=false;
+};
+$('copy').onclick=()=>{const t=DATA.map(v=>v.toFixed(2)+'x').join(' ');
+  try{navigator.clipboard.writeText(t).then(()=>$('msg').textContent='Data (urutan lama ke baru) tersalin.',()=>$('msg').textContent='Salin ditolak browser. Pilih manual dari kotak di bawah.');}catch(e){$('msg').textContent='Salin tidak didukung di sini.';}};
+let clrArm=false;
+$('clr').onclick=()=>{if(!clrArm){clrArm=true;$('clr').textContent='Yakin? Klik lagi';setTimeout(()=>{clrArm=false;$('clr').textContent='Hapus semua'},3500);return;}
+  clrArm=false;$('clr').textContent='Hapus semua';DATA=[];save();$('msg').textContent='Semua data dihapus.';refresh();};
+
+/* ---- statistik ---- */
+function erf(x){const s=x<0?-1:1;x=Math.abs(x);const t=1/(1+.3275911*x);return s*(1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-x*x));}
+const pval=z=>1-erf(Math.abs(z)/Math.SQRT2);
+const Phi=z=>.5*(1+erf(z/Math.SQRT2));
+const rtp=()=>+$('rtp').value/100;
+const BINS=[['1x (<1,01)',1,1.01],['1,01–2x',1.01,2],['2,01–5x',2,5],['5,01–10x',5,10],['>10x',10,1e9]];
+function binP(lo,hi,R){const S=m=>m<=1?1:Math.min(1,R/m);return (lo===1?1:S(lo))-(hi>=1e9?0:S(hi));}
+function binTheory(R){
+  const t=[1-R/1.01,R/1.01-R/2,R/2-R/5,R/5-R/10,R/10];return t;
+}
+function chi(obs,exp,N){let c=0;for(let i=0;i<obs.length;i++){const e=exp[i]*N;c+=(obs[i]-e)**2/e;}
+  const k=obs.length-1,z=(Math.pow(c/k,1/3)-(1-2/(9*k)))/Math.sqrt(2/(9*k));return{c,k,p:1-Phi(z)};}
+function analyze(a){
+  const n=a.length,R=rtp(),rows=[];let flags=0;
+  const add=(name,obs,exp,z)=>{const p=pval(z),sig=p<0.05;if(sig)flags++;rows.push([name,obs,exp,fmt(z,2),fmt(p,3),sig]);};
+  for(const m of[1.5,2,4,10]){const o=a.filter(v=>v>=m).length/n,th=R/m;add(`Peluang jatuh ≥ ${m}x`,fmt(o*100,2)+'%',fmt(th*100,2)+'%',(o-th)/Math.sqrt(th*(1-th)/n));}
+  const l=a.map(Math.log),mu=l.reduce((x,y)=>x+y,0)/n;let c0=0,c1=0;
+  for(let i=0;i<n;i++){c0+=(l[i]-mu)**2;if(i)c1+=(l[i]-mu)*(l[i-1]-mu);}
+  const r1=c1/c0;add('Korelasi ronde berurutan (lag-1)',fmt(r1,3),'0',r1*Math.sqrt(n));
+  const I=a.map(v=>v>=2?1:0),n1=I.reduce((x,y)=>x+y,0),n2=n-n1;let runs=1;for(let i=1;i<n;i++)if(I[i]!==I[i-1])runs++;
+  if(n1>0&&n2>0){const em=2*n1*n2/n+1,ev=(em-1)*(em-2)/(n-1);add('Uji runs (pola naik-turun ≥2x)',runs,fmt(em,0),(runs-em)/Math.sqrt(ev));}
+  const p0=n1/n;let N=0,H=0,st=0;for(let i=0;i<n;i++){if(st>=3){N++;if(I[i])H++;}st=I[i]?0:st+1;}
+  if(N>=20)add('Setelah 3× berturut <2x, peluang ≥2x',fmt(H/N*100,1)+'% (n='+N+')',fmt(p0*100,1)+'%',(H/N-p0)/Math.sqrt(p0*(1-p0)/N));
+  let ch=null;
+  if(n>=150){const th=binTheory(R),ob=BINS.map(b=>a.filter(v=>v>=b[1]&&(b[2]>=1e9?true:v<b[2])).length);ch=chi(ob,th,n);
+    const sig=ch.p<0.05;if(sig)flags++;rows.push(['Kecocokan sebaran (chi-kuadrat)',fmt(ch.c,2)+' (dk '+ch.k+')','< ~'+(ch.k===4?'9,5':'—'),'-',fmt(ch.p,3),sig]);}
+  return{rows,flags,ch};
+}
+function backtest(a){
+  const S=[1.5,2,4,10],n=a.length,out=[],paths=[];
+  S.forEach(c=>{let cum=0,w=0;const pa=[0];a.forEach(v=>{if(v>=c){cum+=c-1;w++;}else cum-=1;pa.push(cum);});paths.push(pa);
+    out.push([c,w/n,cum,cum/n]);});
+  return{out,paths,S};
+}
+const COL=['#4cc9f0','#f72585','#f9c74f','#90be6d'];
+function renderProb(){
+  const R=rtp(),a=DATA,n=a.length,T=[1.5,2,3,5,10,20,50,100];
+  let st=0;for(let i=n-1;i>=0&&a[i]<2;i--)st++;
+  $('streak').innerHTML=n
+   ?`Ronde terakhir di data: ${st>0?`<b>${st} kali berturut-turut di bawah 2x</b>.`:'ronde terakhir tembus 2x.'} Peluang ronde berikutnya tembus 2x tetap <b>${fmt(R/2*100,1)}%</b>, bukan lebih tinggi karena "sudah lama tidak keluar". Anggapan itu disebut <i>gambler's fallacy</i>.`
+   :'Belum ada data. Peluang di bawah tetap berlaku.';
+  let h='<tr><th>Target cashout</th><th>Peluang menang</th><th>Rata-rata 1 menang tiap</th><th>Peluang kalah 5x beruntun</th><th>Teramati di datamu</th></tr>';
+  T.forEach(m=>{const p=R/m,obs=n>=30?fmt(a.filter(v=>v>=m).length/n*100,1)+'%':'-';
+    h+=`<tr><td>${m}x</td><td>${fmt(p*100,2)}%</td><td>${fmt(1/p,1)} ronde</td><td>${fmt(Math.pow(1-p,5)*100,1)}%</td><td>${obs}</td></tr>`;});
+  $('pt').innerHTML=h;calc();
+}
+function calc(){
+  const R=rtp(),b=+$('cb').value||0,c=Math.max(1.01,+$('cc').value||2),k=Math.max(1,Math.floor(+$('ck').value||1)),p=Math.min(1,R/c);
+  $('cres').innerHTML=`Peluang menang di ${fmt(c,2)}x: <b>${fmt(p*100,2)}%</b>. Setiap ronde, rata-rata kamu kehilangan <b class="neg">Rp ${fmt((1-R)*b,0)}</b> (${fmt((1-R)*100,1)}% dari taruhan), dalam jangka panjang.<br>Peluang kalah ${k}× berturut-turut: <b>${fmt(Math.pow(1-p,k)*100,2)}%</b>. Kalau taruhan digandakan tiap kalah (Martingale), kerugian kumulatif setelah ${k} kali kalah = <b class="neg">Rp ${fmt(b*(Math.pow(2,k)-1),0)}</b>.`;
+}
+['cb','cc','ck'].forEach(i=>$(i).addEventListener('input',calc));
+/* ---- uji tebakan ---- */
+let GU=[];try{GU=JSON.parse(localStorage.getItem('hf_guess_v1')||'[]')}catch(e){}
+let PEND=null,GFLASH='';
+try{PEND=JSON.parse(localStorage.getItem('hf_pend_v1')||'null')}catch(e){}
+const gsave=()=>{try{localStorage.setItem('hf_guess_v1',JSON.stringify(GU))}catch(e){}};
+const pstore=()=>{try{localStorage.setItem('hf_pend_v1',JSON.stringify(PEND))}catch(e){}};
+function gstart(d){const t=parseFloat(String($('gt').value).replace(',','.'));
+  if(!(t>1.01)){$('gv').innerHTML='<span class="wrn">Isi target di atas 1,01x.</span>';return;}
+  PEND={d,t,idx:DATA.length};pstore();GFLASH='';$('gres').value='';renderGuess();}
+$('gup').onclick=()=>gstart('up');$('gdn').onclick=()=>gstart('dn');
+$('gcancel').onclick=()=>{PEND=null;pstore();renderGuess();};
+function gscore(v,auto,round){
+  const hit=PEND.d==='up'?v>=PEND.t:v<PEND.t;
+  GU.push({d:PEND.d,t:PEND.t,v,h:hit?1:0});gsave();
+  GFLASH=`${auto?'Dinilai otomatis':'Dicatat'}: tebakan ${PEND.d==='up'?'≥':'<'}${fmt(PEND.t,2)}x, hasil ${fmt(v,2)}x ${hit?'(benar)':'(salah)'}.`;
+  PEND=null;pstore();}
+function resolvePending(){
+  if(PEND&&DATA.length>PEND.idx){gscore(DATA[PEND.idx],true);}
+}
+$('gok').onclick=()=>{if(!PEND)return;const v=parseFloat(String($('gres').value).replace(',','.').replace(/x/i,''));
+  if(!(v>=1)){$('gres').placeholder='isi angka ≥ 1';return;}
+  gscore(v,false);renderGuess();};
+let gArm=false;
+$('gclr').onclick=()=>{if(!gArm){gArm=true;$('gclr').textContent='Yakin? Klik lagi';setTimeout(()=>{gArm=false;$('gclr').textContent='Hapus semua tebakan'},3500);return;}
+  gArm=false;$('gclr').textContent='Hapus semua tebakan';GU=[];gsave();renderGuess();};
+function renderGuess(){
+  if(PEND){$('gpend').style.display='block';
+    $('gptxt').innerHTML=`Tebakanmu: pesawat <b>${PEND.d==='up'?'tembus ≥':'jatuh di bawah'} ${fmt(PEND.t,2)}x</b>. Menunggu ronde berikutnya. Setelah pesawat jatuh, <b>ketik hasilnya di kotak "Tambah cepat"</b> (bagian 2, cukup 1 angka) dan tebakan dinilai otomatis. Kalau kamu menempel grid, ronde baru pertama yang dipakai.`;}
+  else{$('gpend').style.display=GFLASH?'block':'none';$('gptxt').innerHTML=GFLASH;}
+  $('gmrow').style.display=PEND?'flex':'none';
+  const R=rtp(),n=GU.length,hits=GU.reduce((s,x)=>s+x.h,0);
+  $('gn').textContent=n;$('gh').textContent=hits;
+  if(!n){$('ga').textContent=$('ge').textContent='-';$('gv').innerHTML='Belum ada tebakan. Makin banyak tebakan, makin jelas hasilnya (idealnya 100+).';$('gl').innerHTML='';return;}
+  let E=0,V=0;GU.forEach(x=>{const pu=Math.min(1,R/x.t),p=x.d==='up'?pu:1-pu;E+=p;V+=p*(1-p);});
+  const sd=Math.sqrt(V),z=sd>0?(hits-E)/sd:0,p=pval(z),lo=Math.max(0,(E-1.96*sd)/n),hi=Math.min(1,(E+1.96*sd)/n);
+  $('ga').textContent=fmt(hits/n*100,1)+'%';$('ge').textContent=fmt(E/n*100,1)+'%';
+  $('gv').innerHTML=(p<0.05
+    ?`<b>Akurasimu menyimpang dari kebetulan</b> (p = ${fmt(p,3)}). Dengan ${n} tebakan itu bisa muncul karena keberuntungan sesaat, jadi lanjutkan sampai 100+ tebakan dan lihat apakah bertahan.`
+    :`<b>Akurasimu masih dalam batas kebetulan</b> (p = ${fmt(p,3)}). Dengan ${n} tebakan, akurasi antara ${fmt(lo*100,1)}% dan ${fmt(hi*100,1)}% adalah hasil yang wajar untuk penebak acak.`)
+    +`<div class="note">Catatan: menebak "jatuh di bawah target" lebih sering benar (di bawah 2x benar sekitar 51,5%), tetapi itu bukan keuntungan. Di game asli kamu hanya dibayar jika pesawat tembus target, dan bayarannya sudah dihitung agar rata-rata tetap rugi sekitar 3%.</div>`;
+  $('gl').innerHTML='Terakhir: '+GU.slice(-12).reverse().map(x=>`${x.d==='up'?'≥':'&lt;'}${fmt(x.t,1)}x → ${fmt(x.v,2)}x ${x.h?'<span class="pos">✓</span>':'<span class="neg">✗</span>'}`).join(' · ');
+}
+function renderGrid(){
+  const a=DATA.slice().reverse().slice(0,60);
+  let pc='';
+  try{
+    let k=parseInt($('gm').value);if(isNaN(k)||k<0||k>=RM.length)k=2;
+    const m=RM[k],n=DATA.length;
+    if(n>=40){
+      const R=rtp(),P=[1-R/2,R/2-R/5,R/5-R/10,R/10],all=DATA.slice(-3000),N=all.length;let hit=0,E=0,cnt=0;
+      for(let i=10;i<N;i++){const pr=m.f(all.slice(0,i)),act=rcls(all[i]);hit+=(pr===act)?1:0;E+=P[pr];cnt++;}
+      const nx=m.f(all);
+      pc=`<div class="pc"><small>SAMPEL PREDIKSI</small><b>${RB[nx]}</b><small>akurasi uji ulang ${fmt(hit/cnt*100,0)}% · kebetulan ${fmt(E/cnt*100,0)}%</small></div>`;
+    }else pc=`<div class="pc"><small>SAMPEL PREDIKSI</small><b>-</b><small>butuh 40+ ronde</small></div>`;
+  }catch(e){}
+  $('gridw').innerHTML=pc+a.map(v=>{const bg=v>=10?'#8a5a0c':v>=2?'#0f6f78':'#2b3a4d';return `<div style="background:${bg};border-radius:6px;padding:6px 2px;text-align:center;font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:center">${fmt(v,2)}x</div>`;}).join('');
+}
+/* ---- model eksperimen ---- */
+const lm=x=>x.reduce((s,v)=>s+Math.log(v),0)/x.length;
+const MODELS=[
+ {n:'Selalu tebak "jatuh < target"',f:()=>0},
+ {n:'Selalu tebak "tembus ≥ target"',f:()=>1},
+ {n:'Ulangi hasil ronde terakhir',f:(h,T)=>h[h.length-1]>=T?1:0},
+ {n:'Balik hasil ronde terakhir',f:(h,T)=>h[h.length-1]>=T?0:1},
+ {n:'Mayoritas 10 ronde terakhir',f:(h,T)=>h.slice(-10).filter(v=>v>=T).length>=5?1:0},
+ {n:'Momentum (rata-rata 10 ronde terakhir > rata-rata total)',f:h=>lm(h.slice(-10))>lm(h)?1:0},
+ {n:'Setelah 3× berturut di bawah target, tebak tembus',f:(h,T)=>{const l=h.slice(-3);return l.length===3&&l.every(v=>v<T)?1:0}}
+];
+function renderModels(){
+  const T=Math.max(1.1,parseFloat(String($('mt').value).replace(',','.'))||2),R=rtp(),a=DATA.slice(-3000),n=a.length;
+  if(n<40){$('mtab').innerHTML='';$('mv').innerHTML='Butuh minimal 40 ronde untuk uji ulang model.';return;}
+  const pu=Math.min(1,R/T),start=10;
+  let h='<tr><th>Model</th><th>Prediksi ronde berikutnya</th><th>Akurasi uji ulang</th><th>Batas kebetulan</th><th>p-value</th><th>Lebih baik dari kebetulan?</th></tr>',sig=0;
+  MODELS.forEach(m=>{
+    let hit=0,E=0,V=0,cnt=0;
+    for(let i=start;i<n;i++){const hist=a.slice(0,i),pr=m.f(hist,T),act=a[i]>=T?1:0,p=pr?pu:1-pu;
+      hit+=(pr===act)?1:0;E+=p;V+=p*(1-p);cnt++;}
+    const sd=Math.sqrt(V),z=sd>0?(hit-E)/sd:0,p=pval(z),better=p<0.05&&z>0,worse=p<0.05&&z<0;
+    if(better)sig++;
+    const next=m.f(a,T);
+    h+=`<tr><td>${m.n}</td><td><b>${next?'≥ ':'< '}${fmt(T,2)}x</b> <span style="color:var(--mu)">(sampel)</span></td><td>${fmt(hit/cnt*100,1)}%</td><td>${fmt(E/cnt*100,1)}%</td><td>${fmt(p,3)}</td><td>${better?'<span class="tag no">ya</span>':worse?'<span class="tag ok">lebih buruk</span>':'<span class="tag ok">tidak</span>'}</td></tr>`;
+  });
+  $('mtab').innerHTML=h;
+  $('mv').innerHTML=sig===0
+   ?`<b>Tidak ada model yang mengalahkan kebetulan</b> pada ${fmt(n-start)} ronde uji. Prediksi di kolom kedua sama nilainya dengan lempar koin. Itu konsisten dengan data acak murni.`
+   :`<b>${sig} dari ${MODELS.length} model tampak lebih baik dari kebetulan.</b> Dengan ${MODELS.length} model diuji sekaligus, sekitar ${fmt(MODELS.length*0.025,1)} model akan lolos karena kebetulan saja. Ulangi dengan data baru: model yang benar-benar menangkap pola akan tetap unggul, yang kebetulan akan kembali ke ${fmt(pu*100,0)}% atau ${fmt((1-pu)*100,0)}%.`;
+}
+$('mt').addEventListener('input',renderModels);
+
+/* ---- model rentang ---- */
+const RB=['< 2x','2x – 5x','5x – 10x','> 10x'];
+const rcls=v=>v<2?0:v<5?1:v<10?2:3;
+const mode=(arr,k=4)=>{const c=new Array(k).fill(0);arr.forEach(x=>c[x]++);let b=0;for(let i=1;i<k;i++)if(c[i]>c[b])b=i;return b;};
+const seqPred=(h,st,minN=3)=>{const c=h.map(rcls),n=c.length,g=mode(c),cur=st(c,n-1);if(cur===null||n<3)return g;
+  const cnt=[0,0,0,0];for(let j=0;j<n-1;j++)if(st(c,j)===cur)cnt[c[j+1]]++;
+  if(cnt[0]+cnt[1]+cnt[2]+cnt[3]<minN)return g;let b=0;for(let i=1;i<4;i++)if(cnt[i]>cnt[b])b=i;return b;};
+const ngramPred=h=>{const c=h.map(rcls),n=c.length,g=mode(c);
+  for(let k=5;k>=2;k--){if(n<k+3)continue;const cnt=[0,0,0,0];let tot=0;
+   for(let j=k-1;j<n-1;j++){let ok=true;for(let t=0;t<k;t++)if(c[j-t]!==c[n-1-t]){ok=false;break;}if(ok){cnt[c[j+1]]++;tot++;}}
+   if(tot>=3){let b=0;for(let i=1;i<4;i++)if(cnt[i]>cnt[b])b=i;return b;}}
+  return g;};
+const runLen=(c,j)=>{const x=c[j]===0?0:1;let r=0;while(j-r>=0&&r<4&&((c[j-r]===0?0:1)===x))r++;return x+':'+r;};
+const gapBin=(c,j)=>{let g=0;while(j-g>=0&&g<20&&c[j-g]!==3)g++;return g<5?0:g<10?1:g<20?2:3;};
+const RM=[
+ {n:'Selalu tebak rentang tersering menurut teori (< 2x)',f:()=>0},
+ {n:'Ulangi rentang ronde terakhir',f:h=>rcls(h[h.length-1])},
+ {n:'Rentang tersering di 20 ronde terakhir',f:h=>mode(h.slice(-20).map(rcls))},
+ {n:'Rentang tersering di seluruh data',f:h=>mode(h.map(rcls))},
+ {n:'Rentang dari median 10 ronde terakhir',f:h=>{const s=h.slice(-10).sort((x,y)=>x-y);return rcls(s[Math.floor(s.length/2)]);}},
+ {n:'Setelah 2× berturut < 2x, tebak 2x – 5x',f:h=>{const l=h.slice(-2);return l.length===2&&l.every(v=>v<2)?1:0;}},
+ {n:'Pola urutan: Markov orde 1 (lihat 1 hasil terakhir)',f:h=>seqPred(h,(c,j)=>c[j])},
+ {n:'Pola urutan: Markov orde 2 (lihat 2 hasil terakhir)',f:h=>seqPred(h,(c,j)=>j>=1?c[j-1]*4+c[j]:null)},
+ {n:'Pola urutan: cocokkan 2–5 hasil terakhir (n-gram)',f:ngramPred},
+ {n:'Pola urutan: streak (berapa kali berturut < 2x / ≥ 2x)',f:h=>seqPred(h,runLen)},
+ {n:'Pola urutan: jarak sejak angka > 10x terakhir',f:h=>seqPred(h,gapBin)}
+];
+try{$('gm').innerHTML=RM.map((m,i)=>`<option value="${i}"${i===2?' selected':''}>${m.n}</option>`).join('');}catch(e){}
+$('gm').addEventListener('change',renderGrid);
+function renderRange(){
+  const R=rtp(),a=DATA.slice(-3000),n=a.length;
+  const P=[1-R/2,R/2-R/5,R/5-R/10,R/10];
+  const obsAll=[0,0,0,0];a.forEach(v=>obsAll[rcls(v)]++);
+  const rec=a.slice(-100),obsR=[0,0,0,0];rec.forEach(v=>obsR[rcls(v)]++);
+  let h='<tr><th>Rentang</th><th>Peluang ronde berikutnya (teori)</th><th>Teramati di datamu</th><th>100 ronde terakhir</th></tr>';
+  RB.forEach((b,i)=>{h+=`<tr><td>${b}</td><td><b>${fmt(P[i]*100,1)}%</b></td><td>${n?fmt(obsAll[i]/n*100,1)+'%':'-'}</td><td>${rec.length?fmt(obsR[i]/rec.length*100,1)+'%':'-'}</td></tr>`;});
+  $('rptab').innerHTML=h;
+  if(n<40){$('rmtab').innerHTML='';$('rmv').innerHTML=`Median teoritis angka jatuh sekitar <b>${fmt(R/0.5,2)}x</b>: separuh ronde jatuh di bawahnya. Butuh minimal 40 ronde untuk uji ulang model.`;return;}
+  const start=10;let sig=0;
+  let t='<tr><th>Model</th><th>Tebakan ronde berikutnya</th><th>Akurasi uji ulang</th><th>Batas kebetulan</th><th>p-value</th><th>Lebih baik dari kebetulan?</th></tr>';
+  RM.forEach(m=>{
+    let hit=0,E=0,V=0,cnt=0;
+    for(let i=start;i<n;i++){const hist=a.slice(0,i),pr=m.f(hist),act=rcls(a[i]);
+      hit+=(pr===act)?1:0;E+=P[pr];V+=P[pr]*(1-P[pr]);cnt++;}
+    const sd=Math.sqrt(V),z=sd>0?(hit-E)/sd:0,p=pval(z),better=p<0.05&&z>0,worse=p<0.05&&z<0;if(better)sig++;
+    t+=`<tr><td>${m.n}</td><td><b>${RB[m.f(a)]}</b> <span style="color:var(--mu)">(sampel)</span></td><td>${fmt(hit/cnt*100,1)}%</td><td>${fmt(E/cnt*100,1)}%</td><td>${fmt(p,3)}</td><td>${better?'<span class="tag no">ya</span>':worse?'<span class="tag ok">lebih buruk</span>':'<span class="tag ok">tidak</span>'}</td></tr>`;
+  });
+  $('rmtab').innerHTML=t;
+  $('rmv').innerHTML=(sig===0
+   ?`<b>Tidak ada model rentang yang mengalahkan kebetulan</b> pada ${fmt(n-start)} ronde uji. `
+   :`<b>${sig} dari ${RM.length} model tampak lebih baik dari kebetulan.</b> Dengan ${RM.length} model diuji sekaligus, sebagian bisa lolos karena kebetulan saja. Ulangi dengan data baru. `)
+   +`Perhatikan bahwa rentang paling mungkin <b>selalu "< 2x"</b> (${fmt(P[0]*100,1)}%), apa pun hasil sebelumnya. Itu sebabnya tebakan rentang paling "akurat" hanyalah tebakan paling membosankan, dan ia tidak memberi tahu apa pun tentang ronde berikutnya.`;
+}
+function refresh(){
+  const a=DATA,n=a.length;
+  resolvePending();renderProb();renderGuess();renderGrid();renderModels();renderRange();
+  $('kN').textContent=fmt(n);
+  if(n){const s=[...a].sort((x,y)=>x-y);$('kMed').textContent=s[Math.floor(n/2)].toFixed(2)+'x';$('kMax').textContent=s[n-1].toFixed(2)+'x';$('kIns').textContent=fmt(a.filter(v=>v<1.01).length/n*100,1)+'%';}
+  else{$('kMed').textContent=$('kMax').textContent=$('kIns').textContent='-';}
+  $('prog').style.width=Math.min(100,n/10)+'%';$('progt').textContent=`${fmt(Math.min(100,n/10),0)}% menuju 1.000 ronde`;
+  if(n<30){$('tt').innerHTML='';$('verdict').innerHTML='Butuh minimal 30 ronde (idealnya 1.000+) untuk memulai uji.';$('hist').innerHTML='';$('bt').innerHTML='';drawCh(null);return;}
+  const{rows,flags}=analyze(a);
+  let h='<tr><th>Uji</th><th>Teramati</th><th>Harapan (acak murni)</th><th>z</th><th>p-value</th><th>Menyimpang?</th></tr>';
+  rows.forEach(r=>h+=`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td><td>${r[5]?'<span class="tag no">ya</span>':'<span class="tag ok">tidak</span>'}</td></tr>`);
+  $('tt').innerHTML=h;
+  const power=n<300?` <span class="wrn">Data baru ${fmt(n)} ronde: terlalu sedikit untuk kesimpulan kuat.</span>`:'';
+  $('verdict').innerHTML=(flags===0
+   ?`<b>Konsisten dengan acak murni.</b> Ke-${rows.length} uji tidak menemukan penyimpangan pada ${fmt(n)} ronde. Tidak ada pola yang bisa dipakai menebak ronde berikutnya.`
+   :`<b>${flags} dari ${rows.length} uji tampak menyimpang.</b> Dengan ${rows.length} uji sekaligus, sekitar ${fmt(rows.length*.05,1)} uji akan lolos karena kebetulan. Kumpulkan data baru dan ulangi: pola nyata tetap muncul, kebetulan akan hilang. Penyimpangan konsisten pada data besar patut dicurigai sebagai game yang tidak adil.`)+power;
+  const R=rtp(),th=binTheory(R),ob=BINS.map(b=>a.filter(v=>v>=b[1]&&(b[2]>=1e9?true:v<b[2])).length/n);
+  const mx=Math.max(...ob,...th)*1.1;
+  $('hist').innerHTML=BINS.map((b,i)=>`<span>${b[0]}</span><div class="hb"><i style="width:${ob[i]/mx*100}%"></i><u style="left:${th[i]/mx*100}%"></u></div><span>${fmt(ob[i]*100,1)}% <span style="color:var(--mu)">/ ${fmt(th[i]*100,1)}%</span></span>`).join('');
+  const bt=backtest(a);
+  let t='<tr><th>Strategi</th><th>% menang</th><th>Untung/rugi total</th><th>Per ronde</th><th>Teori per ronde</th></tr>';
+  bt.out.forEach((o,i)=>t+=`<tr><td><i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${COL[i]};margin-right:6px"></i>Flat ${o[0]}x</td><td>${fmt(o[1]*100,1)}%</td><td class="${o[2]<0?'neg':'pos'}">${o[2]>0?'+':''}${fmt(o[2],1)}</td><td class="${o[3]<0?'neg':'pos'}">${fmt(o[3],3)}</td><td>${fmt(-(1-R),3)}</td></tr>`);
+  $('bt').innerHTML=t;$('lg').innerHTML=bt.S.map((c,i)=>`<span><i style="background:${COL[i]}"></i>Flat ${c}x</span>`).join('');
+  drawCh(bt);
+}
+function drawCh(bt){
+  const cv=$('ch'),dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;if(!W)return;
+  cv.width=W*dpr;cv.height=H*dpr;const g=cv.getContext('2d');g.scale(dpr,dpr);g.clearRect(0,0,W,H);if(!bt)return;
+  const all=bt.paths.flat(),lo=Math.min(0,...all),hi=Math.max(0,...all),L=44,Rg=8,T=8,B=20,pw=W-L-Rg,ph=H-T-B,n=bt.paths[0].length-1;
+  const X=i=>L+pw*i/n,Y=v=>T+ph*(1-(v-lo)/((hi-lo)||1));
+  g.font='11px system-ui';g.fillStyle='#97a3b3';g.strokeStyle='#283240';
+  for(let k=0;k<=3;k++){const v=lo+(hi-lo)*k/3,y=Y(v);g.beginPath();g.moveTo(L,y);g.lineTo(W-Rg,y);g.stroke();g.fillText(fmt(v,0),4,y+3);}
+  g.fillText('ronde ke-'+fmt(n),W-90,H-5);
+  g.setLineDash([4,4]);g.beginPath();g.moveTo(L,Y(0));g.lineTo(W-Rg,Y(0));g.stroke();g.setLineDash([]);
+  bt.paths.forEach((p,i)=>{g.strokeStyle=COL[i];g.lineWidth=1.8;g.beginPath();p.forEach((v,k)=>k?g.lineTo(X(k),Y(v)):g.moveTo(X(k),Y(v)));g.stroke();});
+}
+window.addEventListener('resize',()=>refresh());
+$('rtp').addEventListener('change',refresh);
+$('schk').onclick=()=>{
+  const N=+$('sN').value,v=['s1','s2','s3','s4','s5'].map(i=>+$(i).value/100),sum=v.reduce((a,b)=>a+b,0),b=$('sres');b.style.display='block';
+  if(Math.abs(sum-1)>0.03){b.innerHTML=`<span class="wrn">Total persentase ${fmt(sum*100,0)}%, harus mendekati 100%.</span>`;return;}
+  const obs=v.map(x=>x/sum*N),r=chi(obs,binTheory(rtp()),N);
+  b.innerHTML=r.p>=0.05?`<b>Cocok dengan acak murni</b> (chi-kuadrat ${fmt(r.c,2)}, p = ${fmt(r.p,3)}). Persentase dari game dibulatkan, jadi ini perkiraan kasar.`:`<b>Tampak menyimpang</b> (chi-kuadrat ${fmt(r.c,2)}, p = ${fmt(r.p,3)}). Ulangi dengan 500 ronde yang berbeda sebelum menyimpulkan.`;
+};
+(function init(){
+  const s=load();
+  if(s&&s.length){DATA=s;}
+  else{const p=parse(SEED);DATA=p.reverse();save();$('msg').innerHTML='Contoh awal dimuat: 60 ronde dari screenshot-mu. Tambahkan data baru di atas ini.';}
+  refresh();
+})();
+</script>
+</body>
+</html>
